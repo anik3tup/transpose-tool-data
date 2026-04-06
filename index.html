@@ -1,0 +1,1280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSV Tools — Transposer & Column Extractor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a; --border: #2e3250;
+  --accent: #6c63ff; --accent2: #ff6584; --green: #43e97b; --yellow: #f7c948;
+  --text: #e8eaf6; --muted: #7b82a8; --radius: 12px;
+}
+body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; min-height:100vh; padding:24px; }
+h1 { font-size:1.6rem; font-weight:700; background:linear-gradient(135deg,var(--accent),var(--accent2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+.subtitle { color:var(--muted); font-size:0.9rem; margin-top:4px; }
+header { margin-bottom:28px; }
+
+#drop-zone { border:2px dashed var(--border); border-radius:var(--radius); padding:48px; text-align:center; cursor:pointer; transition:all 0.2s; background:var(--surface); }
+#drop-zone:hover, #drop-zone.drag-over { border-color:var(--accent); background:rgba(108,99,255,0.08); }
+#drop-zone .icon { font-size:2.5rem; margin-bottom:12px; }
+#drop-zone p { color:var(--muted); margin-top:6px; font-size:0.9rem; }
+#drop-zone strong { color:var(--text); }
+#file-input { display:none; }
+
+/* Sheet picker */
+#sheet-picker { display:none; margin-top:16px; }
+.sheet-list { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.sheet-btn { padding:6px 16px; border-radius:20px; border:1px solid var(--border); background:var(--surface2); color:var(--muted); cursor:pointer; font-size:0.85rem; transition:all 0.15s; }
+.sheet-btn:hover, .sheet-btn.active { border-color:var(--accent); color:var(--accent); background:rgba(108,99,255,0.12); }
+
+.card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px 24px; margin-bottom:20px; }
+.card-title { font-size:0.85rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--accent); margin-bottom:16px; }
+
+.steps { display:flex; margin-bottom:28px; border-radius:var(--radius); overflow:hidden; background:var(--surface); border:1px solid var(--border); }
+.step { flex:1; padding:10px 16px; font-size:0.82rem; font-weight:500; color:var(--muted); text-align:center; border-right:1px solid var(--border); display:flex; align-items:center; justify-content:center; gap:8px; }
+.step:last-child { border-right:none; }
+.step.active { background:rgba(108,99,255,0.15); color:var(--accent); }
+.step.done { color:var(--green); }
+.step-num { width:20px; height:20px; border-radius:50%; background:var(--surface2); font-size:0.75rem; display:flex; align-items:center; justify-content:center; font-weight:700; }
+.step.active .step-num { background:var(--accent); color:white; }
+.step.done .step-num { background:var(--green); color:#0f1117; }
+
+/* Column search */
+.col-search { width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:7px 12px; color:var(--text); font-size:0.85rem; outline:none; margin-bottom:10px; }
+.col-search:focus { border-color:var(--accent); }
+
+.col-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.col-box { border:1px solid var(--border); border-radius:10px; background:var(--surface2); min-height:160px; overflow:hidden; }
+.col-box-header { padding:10px 14px; font-size:0.8rem; font-weight:600; display:flex; align-items:center; gap:8px; border-bottom:1px solid var(--border); }
+.col-box-header.keep { color:var(--green); }
+.col-box-header.transpose { color:var(--accent2); }
+.badge { margin-left:auto; background:var(--border); border-radius:20px; padding:1px 8px; font-size:0.75rem; color:var(--muted); }
+.col-list { padding:8px; display:flex; flex-wrap:wrap; gap:6px; align-content:flex-start; min-height:60px; }
+.col-tag { display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border-radius:6px; font-size:0.82rem; font-weight:500; cursor:pointer; user-select:none; transition:all 0.15s; border:1px solid transparent; }
+.col-tag.keep { background:rgba(67,233,123,0.12); border-color:rgba(67,233,123,0.3); color:var(--green); }
+.col-tag.keep:hover { background:rgba(67,233,123,0.22); }
+.col-tag.transpose { background:rgba(255,101,132,0.12); border-color:rgba(255,101,132,0.3); color:var(--accent2); }
+.col-tag.transpose:hover { background:rgba(255,101,132,0.22); }
+.col-tag .arrow { font-size:0.7rem; opacity:0.7; }
+.col-tag.filtered-out { display:none; }
+
+.form-row { display:flex; gap:16px; flex-wrap:wrap; }
+.form-group { flex:1; min-width:180px; }
+.form-group label { display:block; font-size:0.8rem; color:var(--muted); margin-bottom:6px; }
+.form-group input, .form-group select {
+  width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+  padding:8px 12px; color:var(--text); font-size:0.9rem; outline:none; transition:border-color 0.15s;
+}
+.form-group input:focus, .form-group select:focus { border-color:var(--accent); }
+.form-group select option { background:var(--surface2); }
+.date-preview { margin-top:6px; font-size:0.78rem; color:var(--accent); min-height:16px; }
+
+.hint { background:rgba(108,99,255,0.1); border:1px solid rgba(108,99,255,0.25); border-radius:8px; padding:10px 14px; font-size:0.82rem; color:var(--muted); margin-bottom:16px; line-height:1.5; }
+.hint strong { color:var(--accent); }
+
+/* Row filters */
+.filter-row { display:flex; gap:10px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+.filter-row select, .filter-row input { flex:1; min-width:100px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:7px 10px; color:var(--text); font-size:0.85rem; outline:none; }
+.filter-row select:focus, .filter-row input:focus { border-color:var(--accent); }
+.filter-remove { background:transparent; border:1px solid var(--border); border-radius:6px; color:var(--muted); cursor:pointer; padding:5px 10px; font-size:0.8rem; transition:all 0.15s; }
+.filter-remove:hover { border-color:var(--accent2); color:var(--accent2); }
+
+/* Rename table */
+.rename-grid { display:grid; grid-template-columns:1fr 20px 1fr; gap:8px; align-items:center; margin-bottom:6px; }
+.rename-grid .orig { color:var(--muted); font-size:0.85rem; padding:6px 10px; background:var(--surface2); border-radius:6px; border:1px solid var(--border); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rename-grid .arrow-lbl { color:var(--muted); text-align:center; font-size:0.8rem; }
+.rename-grid input { background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:6px 10px; color:var(--text); font-size:0.85rem; outline:none; width:100%; }
+.rename-grid input:focus { border-color:var(--accent); }
+
+/* Preview table */
+.table-wrap { overflow-x:auto; border-radius:10px; border:1px solid var(--border); max-height:360px; overflow-y:auto; }
+table { width:100%; border-collapse:collapse; font-size:0.82rem; }
+thead { position:sticky; top:0; z-index:2; }
+th { background:var(--surface2); color:var(--accent); font-weight:600; padding:9px 14px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; }
+td { padding:7px 14px; border-bottom:1px solid rgba(46,50,80,0.5); color:var(--text); white-space:nowrap; }
+tr:last-child td { border-bottom:none; }
+tr:hover td { background:rgba(108,99,255,0.06); }
+
+/* Value stats bar */
+.val-stats { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+.val-stat { background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:8px 14px; flex:1; min-width:100px; }
+.val-stat-lbl { font-size:0.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; }
+.val-stat-val { font-size:1.1rem; font-weight:700; color:var(--yellow); margin-top:2px; }
+
+.btn { display:inline-flex; align-items:center; gap:8px; padding:10px 20px; border-radius:8px; font-size:0.9rem; font-weight:600; cursor:pointer; border:none; transition:all 0.15s; }
+.btn-primary { background:var(--accent); color:white; }
+.btn-primary:hover { background:#5a52d5; }
+.btn-secondary { background:var(--surface2); color:var(--text); border:1px solid var(--border); }
+.btn-secondary:hover { border-color:var(--accent); color:var(--accent); }
+.btn-success { background:var(--green); color:#0f1117; }
+.btn-success:hover { background:#35d469; }
+.btn:disabled { opacity:0.4; cursor:not-allowed; }
+.btn-row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-top:16px; }
+
+.stats { display:flex; gap:20px; flex-wrap:wrap; margin-bottom:16px; }
+.stat { background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:10px 16px; min-width:110px; }
+.stat-val { font-size:1.4rem; font-weight:700; color:var(--accent); }
+.stat-label { font-size:0.75rem; color:var(--muted); margin-top:2px; }
+
+.hidden { display:none !important; }
+
+.quick-btns { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+.quick-btn { padding:4px 12px; border-radius:20px; font-size:0.78rem; border:1px solid var(--border); background:transparent; color:var(--muted); cursor:pointer; transition:all 0.15s; }
+.quick-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+.year-note { font-size:0.78rem; color:var(--muted); margin-top:6px; }
+
+/* Toast */
+#toast { position:fixed; bottom:24px; right:24px; background:var(--surface2); border:1px solid var(--green); color:var(--green); border-radius:10px; padding:10px 18px; font-size:0.85rem; font-weight:600; opacity:0; pointer-events:none; transition:opacity 0.3s; z-index:999; }
+#toast.show { opacity:1; }
+
+/* Collapse toggle */
+.collapsible-header { display:flex; align-items:center; justify-content:space-between; cursor:pointer; user-select:none; }
+.collapsible-header .chevron { font-size:0.8rem; color:var(--muted); transition:transform 0.2s; }
+.collapsible-header.open .chevron { transform:rotate(180deg); }
+.collapsible-body { margin-top:14px; }
+
+::-webkit-scrollbar { width:6px; height:6px; }
+::-webkit-scrollbar-track { background:var(--surface); }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:var(--muted); }
+
+/* ── Tab navigation ── */
+.tab-nav { display:flex; gap:0; margin-bottom:28px; border-radius:var(--radius); overflow:hidden; background:var(--surface); border:1px solid var(--border); }
+.tab-btn { flex:1; padding:13px 20px; font-size:0.9rem; font-weight:600; color:var(--muted); background:transparent; border:none; border-right:1px solid var(--border); cursor:pointer; transition:all 0.2s; display:flex; align-items:center; justify-content:center; gap:10px; }
+.tab-btn:last-child { border-right:none; }
+.tab-btn:hover { color:var(--text); background:rgba(255,255,255,0.04); }
+.tab-btn.active { background:rgba(108,99,255,0.15); color:var(--accent); }
+.tab-btn .tab-icon { font-size:1.1rem; }
+
+/* ── Column-to-List page ── */
+#cl-drop-zone { border:2px dashed var(--border); border-radius:var(--radius); padding:40px; text-align:center; cursor:pointer; transition:all 0.2s; background:var(--surface); }
+#cl-drop-zone:hover, #cl-drop-zone.drag-over { border-color:var(--accent); background:rgba(108,99,255,0.08); }
+#cl-drop-zone .icon { font-size:2.2rem; margin-bottom:10px; }
+#cl-drop-zone p { color:var(--muted); margin-top:6px; font-size:0.88rem; }
+#cl-file-input { display:none; }
+
+.col-select-row { display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; margin-bottom:16px; }
+.col-select-row .form-group { flex:2; min-width:200px; }
+.col-select-row .form-group select { font-size:0.95rem; padding:10px 14px; }
+
+.preset-bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+.preset-pill { padding:5px 14px; border-radius:20px; font-size:0.8rem; font-weight:600; border:1px solid var(--border); background:var(--surface2); color:var(--muted); cursor:pointer; transition:all 0.15s; }
+.preset-pill:hover { border-color:var(--accent); color:var(--accent); }
+.preset-pill.active { border-color:var(--accent); color:var(--accent); background:rgba(108,99,255,0.15); }
+
+.list-output { width:100%; min-height:140px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:14px; color:var(--text); font-family:'SF Mono','Fira Code',monospace; font-size:0.85rem; line-height:1.6; resize:vertical; outline:none; transition:border-color 0.15s; }
+.list-output:focus { border-color:var(--accent); }
+
+.list-stats { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:12px; }
+.list-stat { background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:8px 16px; }
+.list-stat-val { font-size:1.2rem; font-weight:700; color:var(--accent); }
+.list-stat-lbl { font-size:0.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; margin-top:1px; }
+</style>
+</head>
+<body>
+
+<div id="toast"></div>
+
+<header>
+  <h1>CSV Data Tools</h1>
+  <p class="subtitle">Unpivot tables, extract columns — all in browser, no upload to any server</p>
+</header>
+
+<!-- Tab Navigation -->
+<div class="tab-nav">
+  <button class="tab-btn active" id="tab-transpose" onclick="switchTab('transpose')">
+    <span class="tab-icon">🔄</span> Table Transposer
+  </button>
+  <button class="tab-btn" id="tab-collist" onclick="switchTab('collist')">
+    <span class="tab-icon">📋</span> Column to List
+  </button>
+</div>
+
+<!-- ═══════════ PAGE 1: TRANSPOSER ═══════════ -->
+<div id="page-transposer">
+
+<div class="steps">
+  <div class="step active" id="step1"><span class="step-num">1</span> Upload</div>
+  <div class="step" id="step2"><span class="step-num">2</span> Columns</div>
+  <div class="step" id="step3"><span class="step-num">3</span> Configure</div>
+  <div class="step" id="step4"><span class="step-num">4</span> Preview & Export</div>
+</div>
+
+<!-- ═══ STEP 1: Upload ═══════════════════════════════════════════════════════ -->
+<div id="section-upload">
+  <div id="drop-zone">
+    <div class="icon">📂</div>
+    <strong>Drop your CSV or Excel file here</strong>
+    <p>or click to browse</p>
+    <p style="margin-top:10px;font-size:0.78rem;">Supports .csv, .xlsx, .xls</p>
+    <input type="file" id="file-input" accept=".csv,.xlsx,.xls">
+  </div>
+
+  <!-- Sheet picker (Excel multi-sheet) -->
+  <div id="sheet-picker" class="card" style="margin-top:16px;">
+    <div class="card-title">📋 Multiple Sheets Detected — Choose One</div>
+    <p style="font-size:0.85rem;color:var(--muted);margin-bottom:10px;">This Excel file has multiple sheets. Select which one to load.</p>
+    <div class="sheet-list" id="sheet-list"></div>
+  </div>
+</div>
+
+<!-- ═══ STEP 2: Column Selection ════════════════════════════════════════════ -->
+<div id="section-columns" class="hidden">
+  <div class="card">
+    <div class="card-title">📄 File Preview (first 5 rows)</div>
+    <div class="table-wrap" id="input-preview"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">⚙️ Column Assignment</div>
+    <div class="hint">
+      <strong>Keep as Columns</strong> = identifier fields that stay as-is (e.g. merchant id, product name).
+      <strong>Transpose to Rows</strong> = pivot columns whose <em>names</em> become row values (e.g. July, August…). Click any tag to move it.
+    </div>
+
+    <div class="quick-btns">
+      <button class="quick-btn" onclick="moveAllTo('keep')">← Keep All</button>
+      <button class="quick-btn" onclick="moveAllTo('transpose')">Transpose All →</button>
+      <button class="quick-btn" onclick="autoDetectMonths()">✨ Auto-detect Month Columns</button>
+    </div>
+
+    <!-- NEW: Column search -->
+    <input type="search" class="col-search" id="col-search" placeholder="🔍 Search columns…" oninput="filterColTags(this.value)">
+
+    <div class="col-grid">
+      <div class="col-box">
+        <div class="col-box-header keep">✅ Keep as Columns <span class="badge" id="keep-count">0</span></div>
+        <div class="col-list" id="keep-list"></div>
+      </div>
+      <div class="col-box">
+        <div class="col-box-header transpose">🔄 Transpose to Rows <span class="badge" id="transpose-count">0</span></div>
+        <div class="col-list" id="transpose-list"></div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="goToStep3()">Next: Configure Output →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STEP 3: Configure ════════════════════════════════════════════════════ -->
+<div id="section-config" class="hidden">
+
+  <!-- Output column names -->
+  <div class="card">
+    <div class="card-title">🏷️ Output Column Names</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Transposed Column Name</label>
+        <input type="text" id="key-col-name" value="billing_date" placeholder="e.g. billing_date, month, period">
+      </div>
+      <div class="form-group">
+        <label>Value Column Name</label>
+        <input type="text" id="val-col-name" value="amount" placeholder="e.g. amount, revenue, count">
+      </div>
+    </div>
+  </div>
+
+  <!-- NEW: Rename keep columns -->
+  <div class="card">
+    <div class="collapsible-header" onclick="toggleCollapse(this)">
+      <span class="card-title" style="margin-bottom:0">✏️ Rename Output Columns (optional)</span>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="collapsible-body hidden" id="rename-body">
+      <p style="font-size:0.82rem;color:var(--muted);margin-bottom:12px;">Leave blank to keep the original column name.</p>
+      <div id="rename-grid"></div>
+    </div>
+  </div>
+
+  <!-- Date format -->
+  <div class="card">
+    <div class="card-title">📅 Date Format</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Format</label>
+        <select id="date-format">
+          <option value="as-is">Keep original (no conversion)</option>
+          <option value="YYYY-MM" selected>YYYY-MM → 2024-07</option>
+          <option value="MM/YYYY">MM/YYYY → 07/2024</option>
+          <option value="DD/MM/YYYY">DD/MM/YYYY → 01/07/2024</option>
+          <option value="Month YYYY">Month YYYY → July 2024</option>
+          <option value="Mon-YY">Mon-YY → Jul-24</option>
+          <option value="custom">Custom…</option>
+        </select>
+        <div class="date-preview" id="date-preview"></div>
+      </div>
+      <div class="form-group">
+        <label>Reference Year <span style="color:var(--muted);font-weight:400;">(when headers are just month names)</span></label>
+        <input type="number" id="ref-year" value="2024" min="2000" max="2100">
+        <div class="year-note">Only needed when column names are like "July" (no year).</div>
+      </div>
+      <div class="form-group" id="custom-format-group" style="display:none">
+        <label>Custom Format String</label>
+        <input type="text" id="custom-format" placeholder="e.g. MM-YYYY">
+        <div class="date-preview" id="custom-preview"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NEW: Value cleaning -->
+  <div class="card">
+    <div class="card-title">🧹 Value Cleaning</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Strip currency symbols</label>
+        <select id="strip-currency">
+          <option value="none">No cleaning</option>
+          <option value="common" selected>Strip ₹ $ £ € ¥ and commas</option>
+          <option value="all">Strip all non-numeric characters</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Convert value to</label>
+        <select id="val-type">
+          <option value="as-is">Keep as text</option>
+          <option value="number" selected>Number (if parseable)</option>
+          <option value="integer">Integer (round down)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Replace errors / unparseable with</label>
+        <select id="err-replace">
+          <option value="keep">Keep original value</option>
+          <option value="empty" selected>Empty string</option>
+          <option value="zero">0</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- NEW: Row pre-filter -->
+  <div class="card">
+    <div class="card-title">🔍 Filter Input Rows (optional)</div>
+    <p style="font-size:0.82rem;color:var(--muted);margin-bottom:12px;">Only keep rows that match ALL of these rules before transposing.</p>
+    <div id="filter-rules"></div>
+    <button class="quick-btn" style="margin-top:8px;" onclick="addFilterRule()">+ Add Filter Rule</button>
+  </div>
+
+  <!-- Extra options -->
+  <div class="card">
+    <div class="card-title">🔧 Extra Options</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Skip rows where value is</label>
+        <select id="skip-empty">
+          <option value="none">Keep all rows</option>
+          <option value="empty" selected>Empty / blank</option>
+          <option value="zero">Zero or empty</option>
+          <option value="null">NULL / null / NA</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Sort output by</label>
+        <select id="sort-by">
+          <option value="none">No sorting</option>
+          <option value="key">Transposed column (date/key)</option>
+          <option value="first-id">First identifier column</option>
+        </select>
+      </div>
+      <!-- NEW: Aggregate duplicates -->
+      <div class="form-group">
+        <label>Aggregate duplicate rows <span style="color:var(--muted);font-weight:400;">(same id + date)</span></label>
+        <select id="agg-method">
+          <option value="none">Keep all (no aggregation)</option>
+          <option value="sum">Sum</option>
+          <option value="avg">Average</option>
+          <option value="min">Min</option>
+          <option value="max">Max</option>
+          <option value="count">Count</option>
+          <option value="first">First value</option>
+          <option value="last">Last value</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-secondary" onclick="goToStep2()">← Back</button>
+    <button class="btn btn-primary" onclick="runTranspose()">Preview Result →</button>
+  </div>
+</div>
+
+<!-- ═══ STEP 4: Preview & Export ═════════════════════════════════════════════ -->
+<div id="section-preview" class="hidden">
+  <div class="card">
+    <div class="card-title">📊 Result Preview</div>
+    <div class="stats" id="stats-row"></div>
+    <div class="val-stats" id="val-stats"></div>
+    <div class="table-wrap" id="output-preview"></div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="goToStep3()">← Back</button>
+      <button class="btn btn-success" onclick="downloadCSV()">⬇ Download CSV</button>
+      <button class="btn btn-secondary" onclick="downloadExcel()">⬇ Download Excel</button>
+      <button class="btn btn-secondary" onclick="copyToClipboard()">📋 Copy to Clipboard</button>
+      <button class="btn btn-secondary" onclick="resetAll()">🔄 Start Over</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- end #page-transposer -->
+
+<!-- ═══════════ PAGE 2: COLUMN TO LIST ═══════════ -->
+<div id="page-collist" class="hidden">
+
+  <!-- Upload -->
+  <div class="card" id="cl-upload-card">
+    <div class="card-title">📂 Upload File</div>
+    <div id="cl-drop-zone">
+      <div class="icon">📄</div>
+      <strong>Drop your CSV or Excel file here</strong>
+      <p>or click to browse &nbsp;·&nbsp; .csv, .xlsx, .xls</p>
+      <input type="file" id="cl-file-input" accept=".csv,.xlsx,.xls">
+    </div>
+    <!-- Sheet picker -->
+    <div id="cl-sheet-picker" style="display:none; margin-top:14px;">
+      <div class="card-title" style="margin-bottom:8px;">📋 Choose Sheet</div>
+      <div class="sheet-list" id="cl-sheet-list"></div>
+    </div>
+  </div>
+
+  <!-- Column selector + preview (shown after load) -->
+  <div id="cl-main" class="hidden">
+
+    <div class="card">
+      <div class="card-title">🗂 Select Column</div>
+      <div class="col-select-row">
+        <div class="form-group">
+          <label>Column to extract</label>
+          <select id="cl-col-select" onchange="generateList()"></select>
+        </div>
+        <button class="btn btn-secondary" onclick="clReset()" style="margin-bottom:0;height:42px;">🔄 Reset</button>
+      </div>
+      <div class="table-wrap" id="cl-preview-table"></div>
+    </div>
+
+    <!-- Options -->
+    <div class="card">
+      <div class="card-title">⚙️ Options</div>
+
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:10px;">Quick presets:</p>
+      <div class="preset-bar" id="cl-presets">
+        <button class="preset-pill" onclick="applyPreset('sql')">SQL IN clause</button>
+        <button class="preset-pill" onclick="applyPreset('python')">Python list</button>
+        <button class="preset-pill" onclick="applyPreset('js')">JS array</button>
+        <button class="preset-pill" onclick="applyPreset('sheets')">Sheets formula</button>
+        <button class="preset-pill" onclick="applyPreset('csv')">Plain CSV</button>
+        <button class="preset-pill" onclick="applyPreset('newline')">One per line</button>
+      </div>
+
+      <div class="form-row" style="margin-top:14px;">
+        <div class="form-group">
+          <label>Separator</label>
+          <select id="cl-sep" onchange="onSepChange()">
+            <option value=",">, (comma)</option>
+            <option value="; ">; (semicolon)</option>
+            <option value=" | ">| (pipe)</option>
+            <option value="\n">↵ newline</option>
+            <option value="\t">⇥ tab</option>
+            <option value=" ">space</option>
+            <option value="custom">Custom…</option>
+          </select>
+        </div>
+        <div class="form-group" id="cl-custom-sep-group" style="display:none">
+          <label>Custom separator</label>
+          <input type="text" id="cl-custom-sep" placeholder="e.g.  •  or   ||" oninput="generateList()">
+        </div>
+        <div class="form-group">
+          <label>Wrap each value in</label>
+          <select id="cl-quote" onchange="generateList()">
+            <option value="">None</option>
+            <option value="'">Single quotes  'value'</option>
+            <option value='"'>Double quotes  "value"</option>
+            <option value="`">Backticks  `value`</option>
+            <option value="[]">Square brackets  [value]</option>
+            <option value="()">Parentheses  (value)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Case transform</label>
+          <select id="cl-case" onchange="generateList()">
+            <option value="none">No change</option>
+            <option value="upper">UPPER CASE</option>
+            <option value="lower">lower case</option>
+            <option value="title">Title Case</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row" style="margin-top:4px;">
+        <div class="form-group">
+          <label>Deduplicate</label>
+          <select id="cl-dedup" onchange="generateList()">
+            <option value="no">Keep all values</option>
+            <option value="yes">Remove duplicates</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Sort</label>
+          <select id="cl-sort" onchange="generateList()">
+            <option value="none">No sort</option>
+            <option value="az">A → Z</option>
+            <option value="za">Z → A</option>
+            <option value="numasc">Numeric ↑</option>
+            <option value="numdesc">Numeric ↓</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Trim whitespace</label>
+          <select id="cl-trim" onchange="generateList()">
+            <option value="yes">Yes (recommended)</option>
+            <option value="no">No</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Skip empty values</label>
+          <select id="cl-skip-empty" onchange="generateList()">
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row" style="margin-top:4px;">
+        <div class="form-group">
+          <label>Prefix (before entire list)</label>
+          <input type="text" id="cl-prefix" placeholder="e.g.  WHERE id IN (" oninput="generateList()">
+        </div>
+        <div class="form-group">
+          <label>Suffix (after entire list)</label>
+          <input type="text" id="cl-suffix" placeholder="e.g.  )" oninput="generateList()">
+        </div>
+      </div>
+    </div>
+
+    <!-- Output -->
+    <div class="card">
+      <div class="card-title">📤 Output</div>
+      <div class="list-stats" id="cl-stats"></div>
+      <textarea class="list-output" id="cl-output" readonly placeholder="Output will appear here…"></textarea>
+      <div class="btn-row">
+        <button class="btn btn-success" onclick="clCopy()">📋 Copy to Clipboard</button>
+        <button class="btn btn-secondary" onclick="clDownload()">⬇ Download .txt</button>
+        <button class="btn btn-secondary" onclick="clDownloadCSV()">⬇ Download .csv</button>
+      </div>
+    </div>
+
+  </div><!-- end #cl-main -->
+</div><!-- end #page-collist -->
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+let rawData = [], headers = [], keepCols = [], transposeCols = [], outputData = [];
+let workbook = null; // for multi-sheet Excel
+
+// ─── MONTH MAP ────────────────────────────────────────────────────────────────
+const MONTH_MAP = {
+  january:1,jan:1,february:2,feb:2,march:3,mar:3,april:4,apr:4,may:5,
+  june:6,jun:6,july:7,jul:7,august:8,aug:8,september:9,sep:9,sept:9,
+  october:10,oct:10,november:11,nov:11,december:12,dec:12
+};
+
+// ─── UPLOAD ───────────────────────────────────────────────────────────────────
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
+
+function handleFile(file) {
+  if (!file) return;
+  const name = file.name.toLowerCase();
+  if (name.endsWith('.csv')) {
+    Papa.parse(file, { header:true, skipEmptyLines:true, complete: r => loadData(r.data, r.meta.fields) });
+  } else if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      workbook = XLSX.read(e.target.result, { type:'array' });
+      if (workbook.SheetNames.length > 1) {
+        showSheetPicker();
+      } else {
+        loadSheetByName(workbook.SheetNames[0]);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  } else {
+    alert('Please upload a .csv, .xlsx, or .xls file.');
+  }
+}
+
+// ─── MULTI-SHEET PICKER ───────────────────────────────────────────────────────
+function showSheetPicker() {
+  const picker = document.getElementById('sheet-picker');
+  const list = document.getElementById('sheet-list');
+  list.innerHTML = '';
+  picker.style.display = '';
+  workbook.SheetNames.forEach(name => {
+    const ws = workbook.Sheets[name];
+    const range = ws['!ref'] || '';
+    const btn = document.createElement('button');
+    btn.className = 'sheet-btn';
+    btn.textContent = name + (range ? ` (${range})` : '');
+    btn.onclick = () => {
+      document.querySelectorAll('.sheet-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      loadSheetByName(name);
+    };
+    list.appendChild(btn);
+  });
+}
+
+function loadSheetByName(name) {
+  const ws = workbook.Sheets[name];
+  const json = XLSX.utils.sheet_to_json(ws, { defval:'' });
+  const cols = json.length ? Object.keys(json[0]) : [];
+  loadData(json, cols);
+}
+
+function loadData(data, cols) {
+  rawData = data; headers = cols;
+  keepCols = [...headers]; transposeCols = [];
+  document.getElementById('col-search').value = '';
+  renderInputPreview();
+  renderColLists();
+  setStep(2);
+}
+
+// ─── PREVIEW TABLE ────────────────────────────────────────────────────────────
+function renderInputPreview() {
+  document.getElementById('input-preview').innerHTML = makeTable(headers, rawData.slice(0, 5));
+}
+
+function makeTable(cols, rows, maxRows = 200) {
+  const r = rows.slice(0, maxRows);
+  let h = '<table><thead><tr>' + cols.map(c => `<th>${esc(c)}</th>`).join('') + '</tr></thead><tbody>';
+  r.forEach(row => { h += '<tr>' + cols.map(c => `<td>${esc(String(row[c] ?? ''))}</td>`).join('') + '</tr>'; });
+  return h + '</tbody></table>';
+}
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ─── COLUMN LISTS ─────────────────────────────────────────────────────────────
+function renderColLists() {
+  const kl = document.getElementById('keep-list');
+  const tl = document.getElementById('transpose-list');
+  kl.innerHTML = ''; tl.innerHTML = '';
+  keepCols.forEach(c => kl.appendChild(makeTag(c, 'keep')));
+  transposeCols.forEach(c => tl.appendChild(makeTag(c, 'transpose')));
+  document.getElementById('keep-count').textContent = keepCols.length;
+  document.getElementById('transpose-count').textContent = transposeCols.length;
+  const q = document.getElementById('col-search').value;
+  if (q) filterColTags(q);
+  buildRenameGrid();
+}
+
+function makeTag(col, type) {
+  const el = document.createElement('div');
+  el.className = `col-tag ${type}`;
+  el.dataset.col = col;
+  el.innerHTML = `${esc(col)} <span class="arrow">${type==='keep'?'→':'←'}</span>`;
+  el.title = `Click to move to ${type==='keep'?'Transpose':'Keep'}`;
+  el.addEventListener('click', () => {
+    if (type === 'keep') { keepCols = keepCols.filter(c=>c!==col); transposeCols.push(col); }
+    else { transposeCols = transposeCols.filter(c=>c!==col); keepCols.push(col); }
+    renderColLists();
+  });
+  return el;
+}
+
+function moveAllTo(t) {
+  if (t==='keep') { keepCols=[...headers]; transposeCols=[]; }
+  else { transposeCols=[...headers]; keepCols=[]; }
+  renderColLists();
+}
+
+function autoDetectMonths() {
+  const re = /^(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec|\d{4}-\d{2}|[a-z]{3}-\d{2,4}|\d{1,2}\/\d{4})$/i;
+  keepCols = headers.filter(h => !re.test(h.trim()));
+  transposeCols = headers.filter(h => re.test(h.trim()));
+  renderColLists();
+}
+
+// ─── COLUMN SEARCH ────────────────────────────────────────────────────────────
+function filterColTags(q) {
+  const term = q.toLowerCase().trim();
+  document.querySelectorAll('.col-tag').forEach(el => {
+    const match = !term || el.dataset.col.toLowerCase().includes(term);
+    el.classList.toggle('filtered-out', !match);
+  });
+}
+
+// ─── RENAME COLUMNS ───────────────────────────────────────────────────────────
+function buildRenameGrid() {
+  const container = document.getElementById('rename-grid');
+  container.innerHTML = '';
+  keepCols.forEach(col => {
+    const div = document.createElement('div');
+    div.className = 'rename-grid';
+    div.innerHTML = `
+      <div class="orig" title="${esc(col)}">${esc(col)}</div>
+      <div class="arrow-lbl">→</div>
+      <input type="text" data-orig="${esc(col)}" placeholder="${esc(col)}" class="rename-input">
+    `;
+    container.appendChild(div);
+  });
+}
+
+function getRenameMap() {
+  const map = {};
+  document.querySelectorAll('.rename-input').forEach(inp => {
+    if (inp.value.trim()) map[inp.dataset.orig] = inp.value.trim();
+  });
+  return map;
+}
+
+function toggleCollapse(header) {
+  header.classList.toggle('open');
+  const body = header.nextElementSibling;
+  body.classList.toggle('hidden');
+  if (!body.classList.contains('hidden')) buildRenameGrid();
+}
+
+// ─── DATE FORMAT ──────────────────────────────────────────────────────────────
+function parseMonthValue(val, year) {
+  const v = String(val).trim();
+  let m = v.match(/^(\d{4})-(\d{1,2})$/);
+  if (m) return { y:+m[1], mo:+m[2] };
+  m = v.match(/^(\d{1,2})\/(\d{4})$/);
+  if (m) return { y:+m[2], mo:+m[1] };
+  m = v.match(/^([a-zA-Z]{3,9})-(\d{2,4})$/i);
+  if (m) {
+    const mo = MONTH_MAP[m[1].toLowerCase()];
+    if (mo) { let y=+m[2]; if(y<100)y+=2000; return {y,mo}; }
+  }
+  const mo = MONTH_MAP[v.toLowerCase()];
+  if (mo) return { y: parseInt(year)||new Date().getFullYear(), mo };
+  return null;
+}
+
+function formatDate(val, format, year) {
+  if (format==='as-is') return val;
+  const parsed = parseMonthValue(val, year);
+  if (!parsed) return val;
+  const {y,mo} = parsed;
+  const mm = String(mo).padStart(2,'0');
+  const MN = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const MA = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  switch(format) {
+    case 'YYYY-MM':    return `${y}-${mm}`;
+    case 'MM/YYYY':    return `${mm}/${y}`;
+    case 'DD/MM/YYYY': return `01/${mm}/${y}`;
+    case 'Month YYYY': return `${MN[mo-1]} ${y}`;
+    case 'Mon-YY':     return `${MA[mo-1]}-${String(y).slice(-2)}`;
+    default: {
+      const fmt = document.getElementById('custom-format').value || format;
+      return fmt.replace('YYYY',y).replace('YY',String(y).slice(-2)).replace('MM',mm).replace('Mon',MA[mo-1]).replace('Month',MN[mo-1]);
+    }
+  }
+}
+
+// ─── VALUE CLEANING ───────────────────────────────────────────────────────────
+function cleanValue(raw) {
+  const stripMode = document.getElementById('strip-currency').value;
+  const valType   = document.getElementById('val-type').value;
+  const errMode   = document.getElementById('err-replace').value;
+
+  let v = String(raw ?? '');
+
+  if (stripMode === 'common') {
+    v = v.replace(/[₹$£€¥₩¢]/g, '').replace(/,/g, '').trim();
+  } else if (stripMode === 'all') {
+    v = v.replace(/[^0-9.\-+e]/gi, '').trim();
+  }
+
+  if (valType === 'as-is') return v || raw;
+
+  const num = parseFloat(v);
+  if (isNaN(num)) {
+    if (errMode === 'empty') return '';
+    if (errMode === 'zero') return 0;
+    return raw; // keep
+  }
+  return valType === 'integer' ? Math.floor(num) : num;
+}
+
+// ─── ROW FILTERS ─────────────────────────────────────────────────────────────
+let filterRules = [];
+
+function addFilterRule() {
+  const id = Date.now();
+  filterRules.push({ id });
+  renderFilterRules();
+}
+
+function removeFilterRule(id) {
+  filterRules = filterRules.filter(r => r.id !== id);
+  renderFilterRules();
+}
+
+function renderFilterRules() {
+  const container = document.getElementById('filter-rules');
+  container.innerHTML = '';
+  filterRules.forEach(rule => {
+    const div = document.createElement('div');
+    div.className = 'filter-row';
+    div.innerHTML = `
+      <select id="fr-col-${rule.id}">
+        ${headers.map(h=>`<option value="${esc(h)}">${esc(h)}</option>`).join('')}
+      </select>
+      <select id="fr-op-${rule.id}">
+        <option value="eq">= (equals)</option>
+        <option value="neq">≠ (not equals)</option>
+        <option value="contains">contains</option>
+        <option value="not_contains">not contains</option>
+        <option value="gt">&gt; (greater than)</option>
+        <option value="lt">&lt; (less than)</option>
+        <option value="starts">starts with</option>
+      </select>
+      <input type="text" id="fr-val-${rule.id}" placeholder="value…">
+      <button class="filter-remove" onclick="removeFilterRule(${rule.id})">✕</button>
+    `;
+    container.appendChild(div);
+  });
+}
+
+function applyFilters(data) {
+  if (filterRules.length === 0) return data;
+  return data.filter(row => {
+    return filterRules.every(rule => {
+      const col = document.getElementById(`fr-col-${rule.id}`)?.value;
+      const op  = document.getElementById(`fr-op-${rule.id}`)?.value;
+      const val = document.getElementById(`fr-val-${rule.id}`)?.value ?? '';
+      if (!col) return true;
+      const cell = String(row[col] ?? '').toLowerCase();
+      const v    = val.toLowerCase();
+      switch(op) {
+        case 'eq':          return cell === v;
+        case 'neq':         return cell !== v;
+        case 'contains':    return cell.includes(v);
+        case 'not_contains':return !cell.includes(v);
+        case 'gt':          return parseFloat(cell) > parseFloat(v);
+        case 'lt':          return parseFloat(cell) < parseFloat(v);
+        case 'starts':      return cell.startsWith(v);
+        default:            return true;
+      }
+    });
+  });
+}
+
+// ─── AGGREGATE DUPLICATES ─────────────────────────────────────────────────────
+function aggregateRows(rows, keyName, valName, method) {
+  if (method === 'none') return rows;
+  const map = new Map();
+  rows.forEach(row => {
+    const keyParts = keepCols.map(k => row[k]);
+    keyParts.push(row[keyName]);
+    const key = keyParts.join('|||');
+    if (!map.has(key)) {
+      map.set(key, { row: { ...row }, vals: [] });
+    }
+    const v = parseFloat(row[valName]);
+    if (!isNaN(v)) map.get(key).vals.push(v);
+  });
+  return Array.from(map.values()).map(({ row, vals }) => {
+    let aggVal = row[valName];
+    if (vals.length > 0) {
+      switch(method) {
+        case 'sum':   aggVal = vals.reduce((a,b)=>a+b,0); break;
+        case 'avg':   aggVal = vals.reduce((a,b)=>a+b,0) / vals.length; break;
+        case 'min':   aggVal = Math.min(...vals); break;
+        case 'max':   aggVal = Math.max(...vals); break;
+        case 'count': aggVal = vals.length; break;
+        case 'first': aggVal = vals[0]; break;
+        case 'last':  aggVal = vals[vals.length-1]; break;
+      }
+      if (method === 'avg') aggVal = Math.round(aggVal * 100) / 100;
+    }
+    row[valName] = aggVal;
+    return row;
+  });
+}
+
+// ─── TRANSPOSE CORE ───────────────────────────────────────────────────────────
+function runTranspose() {
+  const keyName  = document.getElementById('key-col-name').value.trim() || 'key';
+  const valName  = document.getElementById('val-col-name').value.trim() || 'value';
+  const dateFmt  = document.getElementById('date-format').value;
+  const refYear  = document.getElementById('ref-year').value;
+  const skipMode = document.getElementById('skip-empty').value;
+  const sortBy   = document.getElementById('sort-by').value;
+  const aggMeth  = document.getElementById('agg-method').value;
+  const renameMap = getRenameMap();
+
+  if (transposeCols.length === 0) { alert('Move at least one column to "Transpose to Rows".'); return; }
+
+  const filteredData = applyFilters(rawData);
+  let result = [];
+
+  filteredData.forEach(row => {
+    transposeCols.forEach(col => {
+      const rawVal = row[col];
+      const cleanedVal = cleanValue(rawVal);
+
+      // Skip filter (applied after cleaning)
+      const cv = cleanedVal;
+      if (skipMode==='empty' && (cv===''||cv===null||cv===undefined)) return;
+      if (skipMode==='zero' && (cv===''||cv===null||cv===undefined||cv===0||cv==='0')) return;
+      if (skipMode==='null' && (String(cv).toLowerCase()==='null'||String(cv).toLowerCase()==='na'||cv===''||cv===null||cv===undefined)) return;
+
+      const newRow = {};
+      keepCols.forEach(kc => { newRow[renameMap[kc] || kc] = row[kc]; });
+      newRow[keyName] = formatDate(col, dateFmt, refYear);
+      newRow[valName] = cleanedVal;
+      result.push(newRow);
+    });
+  });
+
+  result = aggregateRows(result, keyName, valName, aggMeth);
+
+  if (sortBy==='key') result.sort((a,b) => String(a[keyName]).localeCompare(String(b[keyName])));
+  else if (sortBy==='first-id' && keepCols.length>0) {
+    const firstKey = renameMap[keepCols[0]] || keepCols[0];
+    result.sort((a,b) => String(a[firstKey]).localeCompare(String(b[firstKey])));
+  }
+
+  outputData = result;
+
+  // Output column order
+  const outCols = [...keepCols.map(k => renameMap[k]||k), keyName, valName];
+
+  // Count/stats
+  const statHtml = `
+    <div class="stat"><div class="stat-val">${rawData.length}</div><div class="stat-label">Input Rows</div></div>
+    <div class="stat"><div class="stat-val">${filteredData.length}</div><div class="stat-label">After Filter</div></div>
+    <div class="stat"><div class="stat-val">${transposeCols.length}</div><div class="stat-label">Pivoted Cols</div></div>
+    <div class="stat"><div class="stat-val">${result.length}</div><div class="stat-label">Output Rows</div></div>
+    <div class="stat"><div class="stat-val">${outCols.length}</div><div class="stat-label">Output Cols</div></div>
+  `;
+  document.getElementById('stats-row').innerHTML = statHtml;
+
+  // Value column stats
+  const nums = result.map(r => parseFloat(r[valName])).filter(n => !isNaN(n));
+  if (nums.length > 0) {
+    const sum = nums.reduce((a,b)=>a+b,0);
+    const avg = sum/nums.length;
+    const mn  = Math.min(...nums);
+    const mx  = Math.max(...nums);
+    const fmt = n => n % 1 === 0 ? n.toLocaleString() : n.toLocaleString(undefined,{maximumFractionDigits:2});
+    document.getElementById('val-stats').innerHTML = `
+      <div class="val-stat"><div class="val-stat-lbl">Sum</div><div class="val-stat-val">${fmt(sum)}</div></div>
+      <div class="val-stat"><div class="val-stat-lbl">Average</div><div class="val-stat-val">${fmt(avg)}</div></div>
+      <div class="val-stat"><div class="val-stat-lbl">Min</div><div class="val-stat-val">${fmt(mn)}</div></div>
+      <div class="val-stat"><div class="val-stat-lbl">Max</div><div class="val-stat-val">${fmt(mx)}</div></div>
+      <div class="val-stat"><div class="val-stat-lbl">Rows w/ Value</div><div class="val-stat-val">${nums.length.toLocaleString()}</div></div>
+    `;
+  } else {
+    document.getElementById('val-stats').innerHTML = '';
+  }
+
+  document.getElementById('output-preview').innerHTML = makeTable(outCols, result, 100);
+  setStep(4);
+}
+
+// ─── DOWNLOAD ─────────────────────────────────────────────────────────────────
+function downloadCSV() {
+  const csv = Papa.unparse(outputData);
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='transposed_output.csv'; a.click(); URL.revokeObjectURL(url);
+}
+
+function downloadExcel() {
+  const ws = XLSX.utils.json_to_sheet(outputData);
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Transposed');
+  XLSX.writeFile(wb, 'transposed_output.xlsx');
+}
+
+// ─── COPY TO CLIPBOARD ────────────────────────────────────────────────────────
+function copyToClipboard() {
+  if (!outputData.length) return;
+  const cols = Object.keys(outputData[0]);
+  const lines = [cols.join('\t'), ...outputData.map(r => cols.map(c => r[c]??'').join('\t'))];
+  navigator.clipboard.writeText(lines.join('\n')).then(() => showToast('Copied to clipboard!'));
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ─── NAVIGATION ───────────────────────────────────────────────────────────────
+function setStep(n) {
+  [1,2,3,4].forEach(i => {
+    document.getElementById(`step${i}`).className = 'step' + (i===n?' active':(i<n?' done':''));
+  });
+  document.getElementById('section-upload').classList.toggle('hidden', n!==1);
+  document.getElementById('section-columns').classList.toggle('hidden', n!==2);
+  document.getElementById('section-config').classList.toggle('hidden', n!==3);
+  document.getElementById('section-preview').classList.toggle('hidden', n!==4);
+  window.scrollTo({ top:0, behavior:'smooth' });
+}
+
+function goToStep2() { setStep(2); }
+function goToStep3() {
+  if (transposeCols.length===0) { alert('Move at least one column to "Transpose to Rows" before continuing.'); return; }
+  buildRenameGrid();
+  setStep(3);
+}
+function resetAll() {
+  rawData=[]; headers=[]; keepCols=[]; transposeCols=[]; outputData=[]; workbook=null; filterRules=[];
+  fileInput.value='';
+  document.getElementById('sheet-picker').style.display='none';
+  setStep(1);
+}
+
+// ─── DATE PREVIEW ─────────────────────────────────────────────────────────────
+function updateDatePreview() {
+  const fmt = document.getElementById('date-format').value;
+  const year = document.getElementById('ref-year').value;
+  document.getElementById('custom-format-group').style.display = fmt==='custom' ? '' : 'none';
+  const sample = formatDate('July', fmt, year);
+  document.getElementById('date-preview').textContent = fmt==='as-is' ? 'e.g. "July" → "July"' : `e.g. "July" → "${sample}"`;
+}
+
+document.getElementById('date-format').addEventListener('change', updateDatePreview);
+document.getElementById('ref-year').addEventListener('input', updateDatePreview);
+document.getElementById('custom-format')?.addEventListener('input', () => {
+  const sample = formatDate('July', 'custom', document.getElementById('ref-year').value);
+  document.getElementById('custom-preview').textContent = `e.g. "July" → "${sample}"`;
+});
+
+updateDatePreview();
+
+// ─── TAB SWITCHING ────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.getElementById('page-transposer').classList.toggle('hidden', tab !== 'transpose');
+  document.getElementById('page-collist').classList.toggle('hidden', tab !== 'collist');
+  document.getElementById('tab-transpose').classList.toggle('active', tab === 'transpose');
+  document.getElementById('tab-collist').classList.toggle('active', tab === 'collist');
+}
+
+// ─── COLUMN TO LIST: STATE ────────────────────────────────────────────────────
+let clData = [], clHeaders = [], clWorkbook = null;
+
+// ─── COLUMN TO LIST: UPLOAD ───────────────────────────────────────────────────
+const clDrop = document.getElementById('cl-drop-zone');
+const clFileInput = document.getElementById('cl-file-input');
+
+clDrop.addEventListener('click', () => clFileInput.click());
+clDrop.addEventListener('dragover', e => { e.preventDefault(); clDrop.classList.add('drag-over'); });
+clDrop.addEventListener('dragleave', () => clDrop.classList.remove('drag-over'));
+clDrop.addEventListener('drop', e => { e.preventDefault(); clDrop.classList.remove('drag-over'); clHandleFile(e.dataTransfer.files[0]); });
+clFileInput.addEventListener('change', e => clHandleFile(e.target.files[0]));
+
+function clHandleFile(file) {
+  if (!file) return;
+  const name = file.name.toLowerCase();
+  if (name.endsWith('.csv')) {
+    Papa.parse(file, { header: true, skipEmptyLines: true, complete: r => clLoadData(r.data, r.meta.fields) });
+  } else if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      clWorkbook = XLSX.read(e.target.result, { type: 'array' });
+      if (clWorkbook.SheetNames.length > 1) {
+        clShowSheetPicker();
+      } else {
+        clLoadSheet(clWorkbook.SheetNames[0]);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  } else {
+    alert('Please upload a .csv, .xlsx, or .xls file.');
+  }
+}
+
+function clShowSheetPicker() {
+  const picker = document.getElementById('cl-sheet-picker');
+  const list = document.getElementById('cl-sheet-list');
+  list.innerHTML = '';
+  picker.style.display = '';
+  clWorkbook.SheetNames.forEach(name => {
+    const btn = document.createElement('button');
+    btn.className = 'sheet-btn';
+    btn.textContent = name;
+    btn.onclick = () => {
+      document.querySelectorAll('#cl-sheet-list .sheet-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      clLoadSheet(name);
+    };
+    list.appendChild(btn);
+  });
+}
+
+function clLoadSheet(name) {
+  const ws = clWorkbook.Sheets[name];
+  const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
+  const cols = json.length ? Object.keys(json[0]) : [];
+  clLoadData(json, cols);
+}
+
+function clLoadData(data, cols) {
+  clData = data; clHeaders = cols;
+  // Populate column dropdown
+  const sel = document.getElementById('cl-col-select');
+  sel.innerHTML = cols.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  // Show preview
+  document.getElementById('cl-preview-table').innerHTML = makeTable(cols, data.slice(0, 5));
+  document.getElementById('cl-main').classList.remove('hidden');
+  generateList();
+}
+
+// ─── COLUMN TO LIST: SEPARATOR CHANGE ────────────────────────────────────────
+function onSepChange() {
+  const v = document.getElementById('cl-sep').value;
+  document.getElementById('cl-custom-sep-group').style.display = v === 'custom' ? '' : 'none';
+  generateList();
+}
+
+// ─── COLUMN TO LIST: PRESETS ──────────────────────────────────────────────────
+const PRESETS = {
+  sql:     { sep: ',', quote: "'", dedup: 'yes', sort: 'none', trim: 'yes', skipEmpty: 'yes', prefix: 'WHERE column_name IN (', suffix: ')' },
+  python:  { sep: ', ', quote: "'", dedup: 'no', sort: 'none', trim: 'yes', skipEmpty: 'yes', prefix: '[', suffix: ']' },
+  js:      { sep: ', ', quote: "'", dedup: 'no', sort: 'none', trim: 'yes', skipEmpty: 'yes', prefix: '[', suffix: ']' },
+  sheets:  { sep: ',', quote: '"', dedup: 'no', sort: 'none', trim: 'yes', skipEmpty: 'yes', prefix: 'QUERY(A:A,"SELECT A WHERE A IN (', suffix: ')")' },
+  csv:     { sep: ',', quote: '', dedup: 'no', sort: 'az', trim: 'yes', skipEmpty: 'yes', prefix: '', suffix: '' },
+  newline: { sep: '\n', quote: '', dedup: 'no', sort: 'none', trim: 'yes', skipEmpty: 'yes', prefix: '', suffix: '' },
+};
+
+function applyPreset(key) {
+  document.querySelectorAll('.preset-pill').forEach(p => p.classList.remove('active'));
+  event.target.classList.add('active');
+  const p = PRESETS[key];
+  const sepSel = document.getElementById('cl-sep');
+  const standardSeps = [',', '; ', ' | ', '\n', '\t', ' '];
+  if (standardSeps.includes(p.sep)) {
+    sepSel.value = p.sep;
+    document.getElementById('cl-custom-sep-group').style.display = 'none';
+  } else {
+    sepSel.value = 'custom';
+    document.getElementById('cl-custom-sep-group').style.display = '';
+    document.getElementById('cl-custom-sep').value = p.sep;
+  }
+  document.getElementById('cl-quote').value = p.quote;
+  document.getElementById('cl-dedup').value = p.dedup;
+  document.getElementById('cl-sort').value = p.sort;
+  document.getElementById('cl-trim').value = p.trim;
+  document.getElementById('cl-skip-empty').value = p.skipEmpty;
+  document.getElementById('cl-prefix').value = p.prefix;
+  document.getElementById('cl-suffix').value = p.suffix;
+  generateList();
+}
+
+// ─── COLUMN TO LIST: GENERATE ─────────────────────────────────────────────────
+function generateList() {
+  if (!clData.length) return;
+  const col       = document.getElementById('cl-col-select').value;
+  const sepRaw    = document.getElementById('cl-sep').value;
+  const sep       = sepRaw === 'custom' ? (document.getElementById('cl-custom-sep').value || ',') : sepRaw;
+  const quoteVal  = document.getElementById('cl-quote').value;
+  const caseMode  = document.getElementById('cl-case').value;
+  const dedup     = document.getElementById('cl-dedup').value === 'yes';
+  const sortMode  = document.getElementById('cl-sort').value;
+  const doTrim    = document.getElementById('cl-trim').value === 'yes';
+  const skipEmpty = document.getElementById('cl-skip-empty').value === 'yes';
+  const prefix    = document.getElementById('cl-prefix').value;
+  const suffix    = document.getElementById('cl-suffix').value;
+
+  let values = clData.map(row => String(row[col] ?? ''));
+
+  if (doTrim) values = values.map(v => v.trim());
+  if (skipEmpty) values = values.filter(v => v !== '');
+
+  // Case
+  if (caseMode === 'upper') values = values.map(v => v.toUpperCase());
+  else if (caseMode === 'lower') values = values.map(v => v.toLowerCase());
+  else if (caseMode === 'title') values = values.map(v => v.replace(/\w\S*/g, t => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()));
+
+  const totalBefore = values.length;
+  if (dedup) values = [...new Set(values)];
+  const uniqueCount = dedup ? values.length : new Set(values).size;
+
+  // Sort
+  if (sortMode === 'az') values.sort((a, b) => a.localeCompare(b));
+  else if (sortMode === 'za') values.sort((a, b) => b.localeCompare(a));
+  else if (sortMode === 'numasc') values.sort((a, b) => parseFloat(a) - parseFloat(b));
+  else if (sortMode === 'numdesc') values.sort((a, b) => parseFloat(b) - parseFloat(a));
+
+  // Quote each value
+  let wrapped;
+  if (quoteVal === '[]') wrapped = values.map(v => `[${v}]`);
+  else if (quoteVal === '()') wrapped = values.map(v => `(${v})`);
+  else if (quoteVal) wrapped = values.map(v => `${quoteVal}${v}${quoteVal}`);
+  else wrapped = values;
+
+  const actualSep = sep.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+  const body = wrapped.join(actualSep);
+  const result = prefix + body + suffix;
+
+  document.getElementById('cl-output').value = result;
+
+  // Stats
+  document.getElementById('cl-stats').innerHTML = `
+    <div class="list-stat"><div class="list-stat-val">${totalBefore.toLocaleString()}</div><div class="list-stat-lbl">Total items</div></div>
+    <div class="list-stat"><div class="list-stat-val">${uniqueCount.toLocaleString()}</div><div class="list-stat-lbl">Unique items</div></div>
+    <div class="list-stat"><div class="list-stat-val">${values.length.toLocaleString()}</div><div class="list-stat-lbl">In output</div></div>
+    <div class="list-stat"><div class="list-stat-val">${result.length.toLocaleString()}</div><div class="list-stat-lbl">Characters</div></div>
+  `;
+}
+
+// ─── COLUMN TO LIST: COPY / DOWNLOAD ─────────────────────────────────────────
+function clCopy() {
+  const val = document.getElementById('cl-output').value;
+  if (!val) return;
+  navigator.clipboard.writeText(val).then(() => showToast('Copied to clipboard!'));
+}
+
+function clDownload() {
+  const val = document.getElementById('cl-output').value;
+  if (!val) return;
+  const blob = new Blob([val], { type: 'text/plain;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'column_list.txt'; a.click(); URL.revokeObjectURL(url);
+}
+
+function clDownloadCSV() {
+  const col = document.getElementById('cl-col-select').value;
+  if (!clData.length) return;
+  const doTrim    = document.getElementById('cl-trim').value === 'yes';
+  const skipEmpty = document.getElementById('cl-skip-empty').value === 'yes';
+  const dedup     = document.getElementById('cl-dedup').value === 'yes';
+  let values = clData.map(row => String(row[col] ?? ''));
+  if (doTrim) values = values.map(v => v.trim());
+  if (skipEmpty) values = values.filter(v => v !== '');
+  if (dedup) values = [...new Set(values)];
+  const csv = Papa.unparse(values.map(v => ({ [col]: v })));
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'column_list.csv'; a.click(); URL.revokeObjectURL(url);
+}
+
+function clReset() {
+  clData = []; clHeaders = []; clWorkbook = null;
+  clFileInput.value = '';
+  document.getElementById('cl-main').classList.add('hidden');
+  document.getElementById('cl-sheet-picker').style.display = 'none';
+  document.getElementById('cl-output').value = '';
+  document.getElementById('cl-stats').innerHTML = '';
+  document.querySelectorAll('.preset-pill').forEach(p => p.classList.remove('active'));
+}
+</script>
+</body>
+</html>
