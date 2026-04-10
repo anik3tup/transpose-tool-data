@@ -47,20 +47,31 @@ header { margin-bottom:28px; }
 .col-search { width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:7px 12px; color:var(--text); font-size:0.85rem; outline:none; margin-bottom:10px; }
 .col-search:focus { border-color:var(--accent); }
 
-.col-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-.col-box { border:1px solid var(--border); border-radius:10px; background:var(--surface2); min-height:160px; overflow:hidden; }
+.col-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.col-grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+@media(max-width:700px){ .col-grid-3 { grid-template-columns:1fr; } }
+.col-box { border:1px solid var(--border); border-radius:10px; background:var(--surface2); min-height:130px; overflow:hidden; }
 .col-box-header { padding:10px 14px; font-size:0.8rem; font-weight:600; display:flex; align-items:center; gap:8px; border-bottom:1px solid var(--border); }
 .col-box-header.keep { color:var(--green); }
 .col-box-header.transpose { color:var(--accent2); }
+.col-box-header.exclude { color:#f7794b; }
 .badge { margin-left:auto; background:var(--border); border-radius:20px; padding:1px 8px; font-size:0.75rem; color:var(--muted); }
 .col-list { padding:8px; display:flex; flex-wrap:wrap; gap:6px; align-content:flex-start; min-height:60px; }
-.col-tag { display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border-radius:6px; font-size:0.82rem; font-weight:500; cursor:pointer; user-select:none; transition:all 0.15s; border:1px solid transparent; }
+.col-tag { display:inline-flex; align-items:center; gap:5px; padding:4px 8px; border-radius:6px; font-size:0.8rem; font-weight:500; user-select:none; transition:all 0.15s; border:1px solid transparent; }
+.col-tag-label { cursor:pointer; }
 .col-tag.keep { background:rgba(67,233,123,0.12); border-color:rgba(67,233,123,0.3); color:var(--green); }
 .col-tag.keep:hover { background:rgba(67,233,123,0.22); }
 .col-tag.transpose { background:rgba(255,101,132,0.12); border-color:rgba(255,101,132,0.3); color:var(--accent2); }
 .col-tag.transpose:hover { background:rgba(255,101,132,0.22); }
+.col-tag.exclude { background:rgba(247,121,75,0.12); border-color:rgba(247,121,75,0.3); color:#f7794b; }
+.col-tag.exclude:hover { background:rgba(247,121,75,0.22); }
+.col-tag-x { cursor:pointer; font-size:0.7rem; opacity:0.6; padding:0 2px; line-height:1; }
+.col-tag-x:hover { opacity:1; }
 .col-tag .arrow { font-size:0.7rem; opacity:0.7; }
 .col-tag.filtered-out { display:none; }
+
+/* Preview error banner */
+#preview-error { display:none; background:rgba(255,101,132,0.12); border:1px solid rgba(255,101,132,0.4); border-radius:8px; padding:12px 16px; margin-bottom:14px; color:var(--accent2); font-size:0.85rem; }
 
 .form-row { display:flex; gap:16px; flex-wrap:wrap; }
 .form-group { flex:1; min-width:180px; }
@@ -238,15 +249,15 @@ tr:hover td { background:rgba(108,99,255,0.06); }
     </div>
 
     <div class="quick-btns">
-      <button class="quick-btn" onclick="moveAllTo('keep')">← Keep All</button>
-      <button class="quick-btn" onclick="moveAllTo('transpose')">Transpose All →</button>
+      <button class="quick-btn" onclick="moveAllTo('keep')">✅ Keep All</button>
+      <button class="quick-btn" onclick="moveAllTo('transpose')">🔄 Transpose All</button>
+      <button class="quick-btn" onclick="moveAllTo('exclude')">🗑 Exclude All</button>
       <button class="quick-btn" onclick="autoDetectMonths()">✨ Auto-detect Month Columns</button>
     </div>
 
-    <!-- NEW: Column search -->
     <input type="search" class="col-search" id="col-search" placeholder="🔍 Search columns…" oninput="filterColTags(this.value)">
 
-    <div class="col-grid">
+    <div class="col-grid-3">
       <div class="col-box">
         <div class="col-box-header keep">✅ Keep as Columns <span class="badge" id="keep-count">0</span></div>
         <div class="col-list" id="keep-list"></div>
@@ -254,6 +265,10 @@ tr:hover td { background:rgba(108,99,255,0.06); }
       <div class="col-box">
         <div class="col-box-header transpose">🔄 Transpose to Rows <span class="badge" id="transpose-count">0</span></div>
         <div class="col-list" id="transpose-list"></div>
+      </div>
+      <div class="col-box">
+        <div class="col-box-header exclude">🗑 Exclude from Output <span class="badge" id="exclude-count">0</span></div>
+        <div class="col-list" id="exclude-list"></div>
       </div>
     </div>
 
@@ -301,9 +316,11 @@ tr:hover td { background:rgba(108,99,255,0.06); }
         <label>Format</label>
         <select id="date-format">
           <option value="as-is">Keep original (no conversion)</option>
+          <option value="YYYY-MM-DD">YYYY-MM-DD → 2024-07-01</option>
           <option value="YYYY-MM" selected>YYYY-MM → 2024-07</option>
           <option value="MM/YYYY">MM/YYYY → 07/2024</option>
           <option value="DD/MM/YYYY">DD/MM/YYYY → 01/07/2024</option>
+          <option value="DD-MM-YYYY">DD-MM-YYYY → 01-07-2024</option>
           <option value="Month YYYY">Month YYYY → July 2024</option>
           <option value="Mon-YY">Mon-YY → Jul-24</option>
           <option value="custom">Custom…</option>
@@ -410,6 +427,7 @@ tr:hover td { background:rgba(108,99,255,0.06); }
 <div id="section-preview" class="hidden">
   <div class="card">
     <div class="card-title">📊 Result Preview</div>
+    <div id="preview-error"></div>
     <div class="stats" id="stats-row"></div>
     <div class="val-stats" id="val-stats"></div>
     <div class="table-wrap" id="output-preview"></div>
@@ -575,7 +593,7 @@ tr:hover td { background:rgba(108,99,255,0.06); }
 
 <script>
 // ─── State ────────────────────────────────────────────────────────────────────
-let rawData = [], headers = [], keepCols = [], transposeCols = [], outputData = [];
+let rawData = [], headers = [], keepCols = [], transposeCols = [], excludeCols = [], outputData = [];
 let workbook = null; // for multi-sheet Excel
 
 // ─── MONTH MAP ────────────────────────────────────────────────────────────────
@@ -646,7 +664,7 @@ function loadSheetByName(name) {
 
 function loadData(data, cols) {
   rawData = data; headers = cols;
-  keepCols = [...headers]; transposeCols = [];
+  keepCols = [...headers]; transposeCols = []; excludeCols = [];
   document.getElementById('col-search').value = '';
   renderInputPreview();
   renderColLists();
@@ -671,33 +689,73 @@ function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').re
 function renderColLists() {
   const kl = document.getElementById('keep-list');
   const tl = document.getElementById('transpose-list');
-  kl.innerHTML = ''; tl.innerHTML = '';
+  const el = document.getElementById('exclude-list');
+  kl.innerHTML = ''; tl.innerHTML = ''; el.innerHTML = '';
   keepCols.forEach(c => kl.appendChild(makeTag(c, 'keep')));
   transposeCols.forEach(c => tl.appendChild(makeTag(c, 'transpose')));
+  excludeCols.forEach(c => el.appendChild(makeTag(c, 'exclude')));
   document.getElementById('keep-count').textContent = keepCols.length;
   document.getElementById('transpose-count').textContent = transposeCols.length;
+  document.getElementById('exclude-count').textContent = excludeCols.length;
   const q = document.getElementById('col-search').value;
   if (q) filterColTags(q);
   buildRenameGrid();
+}
+
+function removeFromAll(col) {
+  keepCols = keepCols.filter(c=>c!==col);
+  transposeCols = transposeCols.filter(c=>c!==col);
+  excludeCols = excludeCols.filter(c=>c!==col);
 }
 
 function makeTag(col, type) {
   const el = document.createElement('div');
   el.className = `col-tag ${type}`;
   el.dataset.col = col;
-  el.innerHTML = `${esc(col)} <span class="arrow">${type==='keep'?'→':'←'}</span>`;
-  el.title = `Click to move to ${type==='keep'?'Transpose':'Keep'}`;
-  el.addEventListener('click', () => {
-    if (type === 'keep') { keepCols = keepCols.filter(c=>c!==col); transposeCols.push(col); }
-    else { transposeCols = transposeCols.filter(c=>c!==col); keepCols.push(col); }
+
+  const label = document.createElement('span');
+  label.className = 'col-tag-label';
+  label.textContent = col;
+
+  // Main label click: cycle keep↔transpose, exclude→keep
+  label.addEventListener('click', () => {
+    removeFromAll(col);
+    if (type === 'keep') transposeCols.push(col);
+    else if (type === 'transpose') keepCols.push(col);
+    else keepCols.push(col); // exclude → back to keep
     renderColLists();
   });
+
+  const arrow = document.createElement('span');
+  arrow.className = 'arrow';
+  arrow.textContent = type==='keep' ? '⇄' : type==='transpose' ? '⇄' : '↩';
+
+  el.appendChild(label);
+  el.appendChild(arrow);
+
+  // X button: always sends to exclude (for keep/transpose); for exclude, removes permanently? No — sends back to keep
+  if (type !== 'exclude') {
+    const xBtn = document.createElement('span');
+    xBtn.className = 'col-tag-x';
+    xBtn.textContent = '✕';
+    xBtn.title = 'Exclude this column from output';
+    xBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      removeFromAll(col);
+      excludeCols.push(col);
+      renderColLists();
+    });
+    el.appendChild(xBtn);
+  }
+
+  el.title = type === 'exclude' ? 'Click to restore to Keep' : 'Click to toggle Keep/Transpose · ✕ to Exclude';
   return el;
 }
 
 function moveAllTo(t) {
-  if (t==='keep') { keepCols=[...headers]; transposeCols=[]; }
-  else { transposeCols=[...headers]; keepCols=[]; }
+  if (t==='keep')      { keepCols=[...headers]; transposeCols=[]; excludeCols=[]; }
+  else if (t==='transpose') { transposeCols=[...headers]; keepCols=[]; excludeCols=[]; }
+  else                 { excludeCols=[...headers]; keepCols=[]; transposeCols=[]; }
   renderColLists();
 }
 
@@ -774,14 +832,16 @@ function formatDate(val, format, year) {
   const MN = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const MA = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   switch(format) {
+    case 'YYYY-MM-DD': return `${y}-${mm}-01`;
     case 'YYYY-MM':    return `${y}-${mm}`;
     case 'MM/YYYY':    return `${mm}/${y}`;
     case 'DD/MM/YYYY': return `01/${mm}/${y}`;
+    case 'DD-MM-YYYY': return `01-${mm}-${y}`;
     case 'Month YYYY': return `${MN[mo-1]} ${y}`;
     case 'Mon-YY':     return `${MA[mo-1]}-${String(y).slice(-2)}`;
     default: {
       const fmt = document.getElementById('custom-format').value || format;
-      return fmt.replace('YYYY',y).replace('YY',String(y).slice(-2)).replace('MM',mm).replace('Mon',MA[mo-1]).replace('Month',MN[mo-1]);
+      return fmt.replace('YYYY',y).replace('YY',String(y).slice(-2)).replace('MM',mm).replace('DD','01').replace('Mon',MA[mo-1]).replace('Month',MN[mo-1]);
     }
   }
 }
@@ -910,83 +970,108 @@ function aggregateRows(rows, keyName, valName, method) {
 
 // ─── TRANSPOSE CORE ───────────────────────────────────────────────────────────
 function runTranspose() {
-  const keyName  = document.getElementById('key-col-name').value.trim() || 'key';
-  const valName  = document.getElementById('val-col-name').value.trim() || 'value';
-  const dateFmt  = document.getElementById('date-format').value;
-  const refYear  = document.getElementById('ref-year').value;
-  const skipMode = document.getElementById('skip-empty').value;
-  const sortBy   = document.getElementById('sort-by').value;
-  const aggMeth  = document.getElementById('agg-method').value;
-  const renameMap = getRenameMap();
+  // Hide any previous error
+  const errBanner = document.getElementById('preview-error');
+  errBanner.style.display = 'none';
 
-  if (transposeCols.length === 0) { alert('Move at least one column to "Transpose to Rows".'); return; }
+  try {
+    const keyName  = document.getElementById('key-col-name').value.trim() || 'key';
+    const valName  = document.getElementById('val-col-name').value.trim() || 'value';
+    const dateFmt  = document.getElementById('date-format').value;
+    const refYear  = document.getElementById('ref-year').value;
+    const skipMode = document.getElementById('skip-empty').value;
+    const sortBy   = document.getElementById('sort-by').value;
+    const aggMeth  = document.getElementById('agg-method').value;
+    const renameMap = getRenameMap();
 
-  const filteredData = applyFilters(rawData);
-  let result = [];
+    if (transposeCols.length === 0) {
+      alert('Move at least one column to "Transpose to Rows" in Step 2 first.');
+      return;
+    }
 
-  filteredData.forEach(row => {
-    transposeCols.forEach(col => {
-      const rawVal = row[col];
-      const cleanedVal = cleanValue(rawVal);
+    const filteredData = applyFilters(rawData);
+    let result = [];
 
-      // Skip filter (applied after cleaning)
-      const cv = cleanedVal;
-      if (skipMode==='empty' && (cv===''||cv===null||cv===undefined)) return;
-      if (skipMode==='zero' && (cv===''||cv===null||cv===undefined||cv===0||cv==='0')) return;
-      if (skipMode==='null' && (String(cv).toLowerCase()==='null'||String(cv).toLowerCase()==='na'||cv===''||cv===null||cv===undefined)) return;
+    filteredData.forEach(row => {
+      transposeCols.forEach(col => {
+        const rawVal = row[col];
+        const cleanedVal = cleanValue(rawVal);
 
-      const newRow = {};
-      keepCols.forEach(kc => { newRow[renameMap[kc] || kc] = row[kc]; });
-      newRow[keyName] = formatDate(col, dateFmt, refYear);
-      newRow[valName] = cleanedVal;
-      result.push(newRow);
+        const cv = cleanedVal;
+        if (skipMode==='empty' && (cv===''||cv===null||cv===undefined)) return;
+        if (skipMode==='zero' && (cv===''||cv===null||cv===undefined||cv===0||cv==='0')) return;
+        if (skipMode==='null' && (String(cv).toLowerCase()==='null'||String(cv).toLowerCase()==='na'||cv===''||cv===null||cv===undefined)) return;
+
+        const newRow = {};
+        // Only include keepCols (excludeCols are simply omitted)
+        keepCols.forEach(kc => { newRow[renameMap[kc] || kc] = row[kc]; });
+        newRow[keyName] = formatDate(col, dateFmt, refYear);
+        newRow[valName] = cleanedVal;
+        result.push(newRow);
+      });
     });
-  });
 
-  result = aggregateRows(result, keyName, valName, aggMeth);
+    result = aggregateRows(result, keyName, valName, aggMeth);
 
-  if (sortBy==='key') result.sort((a,b) => String(a[keyName]).localeCompare(String(b[keyName])));
-  else if (sortBy==='first-id' && keepCols.length>0) {
-    const firstKey = renameMap[keepCols[0]] || keepCols[0];
-    result.sort((a,b) => String(a[firstKey]).localeCompare(String(b[firstKey])));
-  }
+    if (sortBy==='key') result.sort((a,b) => String(a[keyName]).localeCompare(String(b[keyName])));
+    else if (sortBy==='first-id' && keepCols.length>0) {
+      const firstKey = renameMap[keepCols[0]] || keepCols[0];
+      result.sort((a,b) => String(a[firstKey]).localeCompare(String(b[firstKey])));
+    }
 
-  outputData = result;
+    outputData = result;
 
-  // Output column order
-  const outCols = [...keepCols.map(k => renameMap[k]||k), keyName, valName];
+    if (result.length === 0) {
+      errBanner.style.display = '';
+      errBanner.textContent = '⚠️ No rows in output. Check your "Skip rows where value is" setting — it may be filtering out all values. Try changing it to "Keep all rows".';
+      setStep(4);
+      document.getElementById('stats-row').innerHTML = '';
+      document.getElementById('val-stats').innerHTML = '';
+      document.getElementById('output-preview').innerHTML = '';
+      return;
+    }
 
-  // Count/stats
-  const statHtml = `
-    <div class="stat"><div class="stat-val">${rawData.length}</div><div class="stat-label">Input Rows</div></div>
-    <div class="stat"><div class="stat-val">${filteredData.length}</div><div class="stat-label">After Filter</div></div>
-    <div class="stat"><div class="stat-val">${transposeCols.length}</div><div class="stat-label">Pivoted Cols</div></div>
-    <div class="stat"><div class="stat-val">${result.length}</div><div class="stat-label">Output Rows</div></div>
-    <div class="stat"><div class="stat-val">${outCols.length}</div><div class="stat-label">Output Cols</div></div>
-  `;
-  document.getElementById('stats-row').innerHTML = statHtml;
+    const outCols = [...keepCols.map(k => renameMap[k]||k), keyName, valName];
 
-  // Value column stats
-  const nums = result.map(r => parseFloat(r[valName])).filter(n => !isNaN(n));
-  if (nums.length > 0) {
-    const sum = nums.reduce((a,b)=>a+b,0);
-    const avg = sum/nums.length;
-    const mn  = Math.min(...nums);
-    const mx  = Math.max(...nums);
-    const fmt = n => n % 1 === 0 ? n.toLocaleString() : n.toLocaleString(undefined,{maximumFractionDigits:2});
-    document.getElementById('val-stats').innerHTML = `
-      <div class="val-stat"><div class="val-stat-lbl">Sum</div><div class="val-stat-val">${fmt(sum)}</div></div>
-      <div class="val-stat"><div class="val-stat-lbl">Average</div><div class="val-stat-val">${fmt(avg)}</div></div>
-      <div class="val-stat"><div class="val-stat-lbl">Min</div><div class="val-stat-val">${fmt(mn)}</div></div>
-      <div class="val-stat"><div class="val-stat-lbl">Max</div><div class="val-stat-val">${fmt(mx)}</div></div>
-      <div class="val-stat"><div class="val-stat-lbl">Rows w/ Value</div><div class="val-stat-val">${nums.length.toLocaleString()}</div></div>
+    const statHtml = `
+      <div class="stat"><div class="stat-val">${rawData.length}</div><div class="stat-label">Input Rows</div></div>
+      <div class="stat"><div class="stat-val">${filteredData.length}</div><div class="stat-label">After Filter</div></div>
+      <div class="stat"><div class="stat-val">${transposeCols.length}</div><div class="stat-label">Pivoted Cols</div></div>
+      <div class="stat"><div class="stat-val">${excludeCols.length}</div><div class="stat-label">Excluded Cols</div></div>
+      <div class="stat"><div class="stat-val">${result.length}</div><div class="stat-label">Output Rows</div></div>
+      <div class="stat"><div class="stat-val">${outCols.length}</div><div class="stat-label">Output Cols</div></div>
     `;
-  } else {
-    document.getElementById('val-stats').innerHTML = '';
-  }
+    document.getElementById('stats-row').innerHTML = statHtml;
 
-  document.getElementById('output-preview').innerHTML = makeTable(outCols, result, 100);
-  setStep(4);
+    // Value stats — use reduce to avoid stack overflow on large datasets
+    const nums = result.map(r => parseFloat(r[valName])).filter(n => !isNaN(n));
+    if (nums.length > 0) {
+      const sum = nums.reduce((a,b) => a+b, 0);
+      const avg = sum / nums.length;
+      const mn  = nums.reduce((a,b) => a < b ? a : b, Infinity);
+      const mx  = nums.reduce((a,b) => a > b ? a : b, -Infinity);
+      const fmt = n => n % 1 === 0 ? n.toLocaleString() : n.toLocaleString(undefined,{maximumFractionDigits:2});
+      document.getElementById('val-stats').innerHTML = `
+        <div class="val-stat"><div class="val-stat-lbl">Sum</div><div class="val-stat-val">${fmt(sum)}</div></div>
+        <div class="val-stat"><div class="val-stat-lbl">Average</div><div class="val-stat-val">${fmt(avg)}</div></div>
+        <div class="val-stat"><div class="val-stat-lbl">Min</div><div class="val-stat-val">${fmt(mn)}</div></div>
+        <div class="val-stat"><div class="val-stat-lbl">Max</div><div class="val-stat-val">${fmt(mx)}</div></div>
+        <div class="val-stat"><div class="val-stat-lbl">Numeric Rows</div><div class="val-stat-val">${nums.length.toLocaleString()}</div></div>
+      `;
+    } else {
+      document.getElementById('val-stats').innerHTML = '';
+    }
+
+    document.getElementById('output-preview').innerHTML = makeTable(outCols, result, 100);
+    setStep(4);
+
+  } catch(err) {
+    // Show error banner so user knows what went wrong
+    errBanner.style.display = '';
+    errBanner.innerHTML = `⚠️ <strong>Preview failed:</strong> ${esc(err.message)} — Check your configuration and try again.`;
+    setStep(4);
+    console.error('runTranspose error:', err);
+  }
 }
 
 // ─── DOWNLOAD ─────────────────────────────────────────────────────────────────
@@ -1035,9 +1120,10 @@ function goToStep3() {
   setStep(3);
 }
 function resetAll() {
-  rawData=[]; headers=[]; keepCols=[]; transposeCols=[]; outputData=[]; workbook=null; filterRules=[];
+  rawData=[]; headers=[]; keepCols=[]; transposeCols=[]; excludeCols=[]; outputData=[]; workbook=null; filterRules=[];
   fileInput.value='';
   document.getElementById('sheet-picker').style.display='none';
+  document.getElementById('preview-error').style.display='none';
   setStep(1);
 }
 
