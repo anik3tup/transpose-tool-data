@@ -465,12 +465,12 @@ tr:hover td { background:rgba(108,99,255,0.06); }
 
       <p style="font-size:0.8rem;color:var(--muted);margin-bottom:10px;">Quick presets:</p>
       <div class="preset-bar" id="cl-presets">
-        <button class="preset-pill" onclick="applyPreset('sql')">SQL IN clause</button>
-        <button class="preset-pill" onclick="applyPreset('python')">Python list</button>
-        <button class="preset-pill" onclick="applyPreset('js')">JS array</button>
-        <button class="preset-pill" onclick="applyPreset('sheets')">Sheets formula</button>
-        <button class="preset-pill" onclick="applyPreset('csv')">Plain CSV</button>
-        <button class="preset-pill" onclick="applyPreset('newline')">One per line</button>
+        <button class="preset-pill" onclick="applyPreset('sql', this)">SQL IN clause</button>
+        <button class="preset-pill" onclick="applyPreset('python', this)">Python list</button>
+        <button class="preset-pill" onclick="applyPreset('js', this)">JS array</button>
+        <button class="preset-pill" onclick="applyPreset('sheets', this)">Sheets formula</button>
+        <button class="preset-pill" onclick="applyPreset('csv', this)">Plain CSV</button>
+        <button class="preset-pill" onclick="applyPreset('newline', this)">One per line</button>
       </div>
 
       <div class="form-row" style="margin-top:14px;">
@@ -1146,20 +1146,20 @@ function onSepChange() {
 
 // ─── COLUMN TO LIST: PRESETS ──────────────────────────────────────────────────
 const PRESETS = {
-  sql:     { sep: ',', quote: "'", dedup: 'yes', sort: 'none', trim: 'yes', skipEmpty: 'yes', prefix: 'WHERE column_name IN (', suffix: ')' },
-  python:  { sep: ', ', quote: "'", dedup: 'no', sort: 'none', trim: 'yes', skipEmpty: 'yes', prefix: '[', suffix: ']' },
-  js:      { sep: ', ', quote: "'", dedup: 'no', sort: 'none', trim: 'yes', skipEmpty: 'yes', prefix: '[', suffix: ']' },
-  sheets:  { sep: ',', quote: '"', dedup: 'no', sort: 'none', trim: 'yes', skipEmpty: 'yes', prefix: 'QUERY(A:A,"SELECT A WHERE A IN (', suffix: ')")' },
-  csv:     { sep: ',', quote: '', dedup: 'no', sort: 'az', trim: 'yes', skipEmpty: 'yes', prefix: '', suffix: '' },
-  newline: { sep: '\n', quote: '', dedup: 'no', sort: 'none', trim: 'yes', skipEmpty: 'yes', prefix: '', suffix: '' },
+  sql:     { sep: ',',   quote: "'", dedup: 'yes', sort: 'none', trim: 'yes', skipEmpty: 'yes', prefix: 'WHERE column_name IN (', suffix: ')' },
+  python:  { sep: ', ',  quote: "'", dedup: 'no',  sort: 'none', trim: 'yes', skipEmpty: 'yes', prefix: '[', suffix: ']' },
+  js:      { sep: ', ',  quote: "'", dedup: 'no',  sort: 'none', trim: 'yes', skipEmpty: 'yes', prefix: '[', suffix: ']' },
+  sheets:  { sep: ',',   quote: '"', dedup: 'no',  sort: 'none', trim: 'yes', skipEmpty: 'yes', prefix: 'QUERY(A:A,"SELECT A WHERE A IN (', suffix: ')")' },
+  csv:     { sep: ',',   quote: '',  dedup: 'no',  sort: 'az',   trim: 'yes', skipEmpty: 'yes', prefix: '', suffix: '' },
+  newline: { sep: '\\n', quote: '',  dedup: 'no',  sort: 'none', trim: 'yes', skipEmpty: 'yes', prefix: '', suffix: '' },
 };
 
-function applyPreset(key) {
+function applyPreset(key, btn) {
   document.querySelectorAll('.preset-pill').forEach(p => p.classList.remove('active'));
-  event.target.classList.add('active');
+  if (btn) btn.classList.add('active');
   const p = PRESETS[key];
   const sepSel = document.getElementById('cl-sep');
-  const standardSeps = [',', '; ', ' | ', '\n', '\t', ' '];
+  const standardSeps = [',', '; ', ' | ', '\\n', '\\t', ' '];
   if (standardSeps.includes(p.sep)) {
     sepSel.value = p.sep;
     document.getElementById('cl-custom-sep-group').style.display = 'none';
